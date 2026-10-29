@@ -1,0 +1,23 @@
+name: company-container
+
+on:
+  workflow_call:
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t app:${{ github.sha }} .
+
+      - name: Trivy scan
+        run: >
+          docker run --rm
+          -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:latest image
+          --severity HIGH,CRITICAL
+          --ignore-unfixed
+          --exit-code 1
+          app:${{ github.sha }}
