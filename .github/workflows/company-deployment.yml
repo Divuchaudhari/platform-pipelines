@@ -1,0 +1,48 @@
+name: company-deployment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment name
+        required: true
+        type: string
+      name:
+        description: Short name used for namespace and values file
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: image
+
+      - name: Create test cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: demo
+
+      - name: Load image into cluster
+        run: |
+          docker load -i image.tar
+          kind load docker-image sample-app-python:${{ github.sha }} --name demo
+
+      - name: Deploy with Helm
+        run: >
+          helm upgrade --install web helm/sample-app
+          -n ${{ inputs.name }} --create-namespace
+          -f helm/environments/values-${{ inputs.name }}.yaml
+          --set image.tag=${{ github.sha }}
+          --wait --timeout 120s
+
+      - name: Smoke test
+        run: |
+          kubectl -n ${{ inputs.name }} port-forward service/web 8080:5000 &
+          sleep 5
+          curl --fail http://localhost:8080/health
